@@ -6,7 +6,7 @@ class Product {
   final String description;
   final double price;
   final String imageUrl;
-  final String category; // 'cup', 'beans', 'ground', 'specials'
+  final String category; // 'cup', 'beans', 'ground', 'specials', 'café'
   final bool isAvailable;
   final List<String>? availableSizes; // Optional: ['S', 'M', 'L']
   final List<String>? tags; // Optional: ['popular', 'new', 'limited']
@@ -257,6 +257,57 @@ class ProductExamples {
         category: 'specials',
         isAvailable: true,
         availableSizes: ['M', 'L'],
+      ),
+
+      // Café Category - Canned Coffee Drinks
+      Product(
+        id: '16',
+        name: 'P&Café Original',
+        description: '100% Arabica (Rwanda) - Zero Emission 355 mL',
+        price: 450.0,
+        imageUrl: 'assets/images/café_img.png',
+        category: 'café',
+        isAvailable: true,
+        tags: ['popular', 'new'],
+      ),
+      Product(
+        id: '17',
+        name: 'P&Café Espresso',
+        description: 'Strong espresso in a can - 100% Arabica 355 mL',
+        price: 480.0,
+        imageUrl: 'assets/images/café_img.png',
+        category: 'café',
+        isAvailable: true,
+        tags: ['popular'],
+      ),
+      Product(
+        id: '18',
+        name: 'P&Café Latte',
+        description: 'Smooth latte in a can - 100% Arabica 355 mL',
+        price: 500.0,
+        imageUrl: 'assets/images/café_img.png',
+        category: 'café',
+        isAvailable: true,
+        tags: ['new'],
+      ),
+      Product(
+        id: '19',
+        name: 'P&Café Mocha',
+        description: 'Chocolate coffee blend - 100% Arabica 355 mL',
+        price: 520.0,
+        imageUrl: 'assets/images/café_img.png',
+        category: 'café',
+        isAvailable: true,
+      ),
+      Product(
+        id: '20',
+        name: 'P&Café Cold Brew',
+        description: 'Premium cold brew - Zero Emission 355 mL',
+        price: 550.0,
+        imageUrl: 'assets/images/café_img.png',
+        category: 'café',
+        isAvailable: true,
+        tags: ['popular', 'limited'],
       ),
     ];
   }

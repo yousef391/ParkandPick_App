@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
   final List<Map<String, String>> _categories = const [
     {'id': 'all', 'label': 'All'},
     {'id': 'cup', 'label': 'Cup'},
+    {'id': 'café', 'label': 'Café'},
     {'id': 'beans', 'label': 'Beans'},
     {'id': 'ground', 'label': 'Ground'},
     {'id': 'specials', 'label': 'Specials'},
