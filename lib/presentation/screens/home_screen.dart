@@ -33,11 +33,10 @@ class _HomeScreenState extends State<HomeScreen>
   // Categories
   final List<Map<String, String>> _categories = const [
     {'id': 'all', 'label': 'All'},
-    {'id': 'cup', 'label': 'Cup'},
-    {'id': 'café', 'label': 'Café'},
-    {'id': 'beans', 'label': 'Beans'},
-    {'id': 'ground', 'label': 'Ground'},
-    {'id': 'specials', 'label': 'Specials'},
+    {'id': 'cafe', 'label': 'Café'},
+    {'id': 'boissons', 'label': 'Boissons'},
+    {'id': 'lunch', 'label': 'Boîte Lunch'},
+    {'id': 'snacks', 'label': 'Snacks'},
   ];
 
   @override
@@ -176,13 +175,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
 
-            // Delivery Options - DoorDash / Uber Eats
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 20.h),
-                child: const DeliveryOptionsWidget(),
-              ),
-            ),
+            // Delivery Options removed (DoorDash / Uber Eats)
 
             // Category Chips
             SliverToBoxAdapter(

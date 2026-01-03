@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,6 +10,7 @@ import 'package:testtt/core/utils/price_formatter.dart';
 import 'package:testtt/data/models/station_model.dart';
 import 'package:testtt/presentation/widgets/Custom_checkout_appbar.dart';
 import 'package:testtt/presentation/widgets/order_item_card.dart';
+import 'package:testtt/presentation/widgets/delivery_method_selector.dart';
 import 'package:testtt/providers/cart_provider.dart';
 import 'package:testtt/providers/location_provider.dart';
 import 'package:testtt/providers/order_provider.dart';
@@ -24,6 +26,9 @@ class StationCheckoutScreen extends StatefulWidget {
 }
 
 class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
+  late final WebViewController _paymentWebViewController;
+  String _selectedDeliveryMethod = 'pickup';
+  String? _selectedDeliveryType; // 'doordash' or 'ubereats'
   final MapController _mapController = MapController();
 
   @override
@@ -33,6 +38,30 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadStationsWithRealDistance();
     });
+
+    // Initialize payment WebViewController
+    _paymentWebViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            // Optionally handle progress
+          },
+          onPageStarted: (String url) {},
+          onPageFinished: (String url) {},
+          onHttpError: (HttpResponseError error) {},
+          onWebResourceError: (WebResourceError error) {},
+          onNavigationRequest: (NavigationRequest request) {
+            // Example: block YouTube
+            if (request.url.startsWith('https://www.youtube.com/')) {
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
+      ..loadRequest(
+          Uri.parse('https://parkandpick.order-online.ai/#/order/payment'));
   }
 
   /// Load stations using user's real GPS location for accurate distances
@@ -112,19 +141,130 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
 
                       SizedBox(height: 24.h),
 
-                      // Station Selection Dropdown
-                      Text(
-                        'Select Pickup Station',
-                        style: TextStyles.heading2.copyWith(
-                          fontSize: 18.sp,
-                          color: ColorsManager.blackcolor,
-                        ),
+                      // Delivery Method Selection
+                      DeliveryMethodSelector(
+                        selectedMethod: _selectedDeliveryMethod,
+                        onChanged: (String method) {
+                          setState(() {
+                            _selectedDeliveryMethod = method;
+                            if (method == 'pickup') {
+                              _selectedDeliveryType = null;
+                            }
+                          });
+                        },
                       ),
-                      SizedBox(height: 12.h),
+                      SizedBox(height: 20.h),
 
-                      _buildStationDropdown(stationProvider),
+                      if (_selectedDeliveryMethod == 'delivery') ...[
+                        Text(
+                          'Sélectionnez le service de livraison',
+                          style: TextStyles.heading2.copyWith(
+                            fontSize: 18.sp,
+                            color: ColorsManager.blackcolor,
+                          ),
+                        ),
+                        SizedBox(height: 12.h),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(
+                                    () => _selectedDeliveryType = 'doordash'),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                                  decoration: BoxDecoration(
+                                    color: _selectedDeliveryType == 'doordash'
+                                        ? ColorsManager.primary
+                                        : ColorsManager.softGrey,
+                                    borderRadius: BorderRadius.circular(12.r),
+                                    border: Border.all(
+                                      color: _selectedDeliveryType == 'doordash'
+                                          ? ColorsManager.primary
+                                          : ColorsManager.textfieldbordercolor,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delivery_dining,
+                                          color: _selectedDeliveryType ==
+                                                  'doordash'
+                                              ? ColorsManager.whitecolor
+                                              : ColorsManager.darkblue,
+                                          size: 28.sp),
+                                      SizedBox(height: 8.h),
+                                      Text('DoorDash',
+                                          style: TextStyles.bodyBold.copyWith(
+                                              color: _selectedDeliveryType ==
+                                                      'doordash'
+                                                  ? ColorsManager.whitecolor
+                                                  : ColorsManager.darkblue,
+                                              fontSize: 14.sp)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 16.w),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(
+                                    () => _selectedDeliveryType = 'ubereats'),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                                  decoration: BoxDecoration(
+                                    color: _selectedDeliveryType == 'ubereats'
+                                        ? ColorsManager.primary
+                                        : ColorsManager.softGrey,
+                                    borderRadius: BorderRadius.circular(12.r),
+                                    border: Border.all(
+                                      color: _selectedDeliveryType == 'ubereats'
+                                          ? ColorsManager.primary
+                                          : ColorsManager.textfieldbordercolor,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delivery_dining,
+                                          color: _selectedDeliveryType ==
+                                                  'ubereats'
+                                              ? ColorsManager.whitecolor
+                                              : ColorsManager.darkblue,
+                                          size: 28.sp),
+                                      SizedBox(height: 8.h),
+                                      Text('UberEats',
+                                          style: TextStyles.bodyBold.copyWith(
+                                              color: _selectedDeliveryType ==
+                                                      'ubereats'
+                                                  ? ColorsManager.whitecolor
+                                                  : ColorsManager.darkblue,
+                                              fontSize: 14.sp)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 24.h),
+                      ],
 
-                      SizedBox(height: 24.h),
+                      if (_selectedDeliveryMethod == 'pickup') ...[
+                        // Station Selection Dropdown
+                        Text(
+                          'Select Pickup Station',
+                          style: TextStyles.heading2.copyWith(
+                            fontSize: 18.sp,
+                            color: ColorsManager.blackcolor,
+                          ),
+                        ),
+                        SizedBox(height: 12.h),
+                        _buildStationDropdown(stationProvider),
+                        SizedBox(height: 24.h),
+                      ],
 
                       // Map Section
                       if (stationProvider.selectedStation != null) ...[
@@ -543,6 +683,18 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.r),
+          ),
+        ),
+      );
+
+      // Open payment webview
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              title: const Text('Paiement'),
+            ),
+            body: WebViewWidget(controller: _paymentWebViewController),
           ),
         ),
       );

@@ -21,7 +21,7 @@ class UserProfile {
 /// User Provider - manages profile & avatar (in-memory stub)
 class UserProvider extends ChangeNotifier {
   UserProfile _currentUser = const UserProfile(
-    name: 'User Name',
+    name: 'Segond',
     email: 'user@example.com',
   );
   bool _updating = false;

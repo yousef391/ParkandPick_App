@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/data/onboarding_model.dart';
@@ -17,11 +16,12 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late PageController _pageController;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  late AnimationController _scaleController;
+  late AnimationController _floatController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _floatAnimation;
 
   final List<OnboardingData> _onboardingPages = OnboardingData.onboardingPages;
   bool _imagesPrecached = false;
@@ -36,7 +36,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Precache images after context is available
     if (!_imagesPrecached) {
       _precacheImages();
       _imagesPrecached = true;
@@ -50,49 +49,47 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _initializeAnimations() {
-    _animationController = AnimationController(
+    // Scale animation for images
+    _scaleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 800),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+        parent: _scaleController,
+        curve: Curves.easeOutBack,
       ),
     );
 
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _animationController,
-            curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic),
-          ),
-        );
+    // Float animation for continuous movement
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
 
-    _animationController.forward();
+    _floatAnimation = Tween<double>(begin: -10, end: 10).animate(
+      CurvedAnimation(
+        parent: _floatController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    _scaleController.forward();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _animationController.dispose();
+    _scaleController.dispose();
+    _floatController.dispose();
     super.dispose();
   }
 
   void _handlePageChanged(int index, OnboardingProvider provider) {
     provider.setPage(index);
-    _animationController.reset();
-    _animationController.forward();
-  }
-
-  void _handleSkip(OnboardingProvider provider) {
-    provider.setPage(_onboardingPages.length - 1);
-    _pageController.animateToPage(
-      _onboardingPages.length - 1,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-    );
+    _scaleController.reset();
+    _scaleController.forward();
   }
 
   void _handleNext(OnboardingProvider provider) {
@@ -113,32 +110,50 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ColorsManager.whitecolor,
-      resizeToAvoidBottomInset: false,
+      backgroundColor: ColorsManager.primary,
       body: SafeArea(
         child: Consumer<OnboardingProvider>(
           builder: (context, provider, child) {
-            return Column(
+            return Stack(
               children: [
-                // Skip Button
-                _buildSkipButton(provider),
+                // Decorative circles
+                _buildDecorativeCircles(),
 
-                // PageView with Images
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: _onboardingPages.length,
-                    onPageChanged: (index) =>
-                        _handlePageChanged(index, provider),
-                    physics: const BouncingScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      return _buildOnboardingPage(_onboardingPages[index]);
-                    },
-                  ),
+                // Main content
+                Column(
+                  children: [
+                    SizedBox(height: 40.h),
+
+                    // Logo placeholder at top
+                    _buildLogo(),
+
+                    SizedBox(height: 20.h),
+
+                    // Page indicator dots
+                    _buildPageIndicator(provider),
+
+                    SizedBox(height: 40.h),
+
+                    // PageView with content
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: _onboardingPages.length,
+                        onPageChanged: (index) =>
+                            _handlePageChanged(index, provider),
+                        physics: const BouncingScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          return _buildOnboardingPage(_onboardingPages[index]);
+                        },
+                      ),
+                    ),
+
+                    // Bottom button
+                    _buildBottomButton(provider),
+
+                    SizedBox(height: 40.h),
+                  ],
                 ),
-
-                // Bottom Section: Dots + Next Button
-                _buildBottomSection(provider),
               ],
             );
           },
@@ -147,25 +162,80 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildSkipButton(OnboardingProvider provider) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: TextButton(
-          onPressed: () => _handleSkip(provider),
-          style: TextButton.styleFrom(
-            foregroundColor: ColorsManager.greycolor,
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-            minimumSize: Size(60.w, 36.h),
-          ),
-          child: Text(
-            'Skip',
-            style: TextStyles.body.copyWith(
-              color: ColorsManager.greycolor,
-              fontWeight: FontWeight.w500,
-              fontSize: 15.sp,
+  Widget _buildDecorativeCircles() {
+    return Stack(
+      children: [
+        // Large circle top
+        Positioned(
+          top: -100.h,
+          right: -50.w,
+          child: Container(
+            width: 300.w,
+            height: 300.h,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: ColorsManager.whitecolor.withOpacity(0.1),
             ),
+          ),
+        ),
+        // Medium circle
+        Positioned(
+          top: 100.h,
+          left: -80.w,
+          child: Container(
+            width: 200.w,
+            height: 200.h,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: ColorsManager.whitecolor.withOpacity(0.08),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogo() {
+    return Container(
+      width: 60.w,
+      height: 60.h,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: ColorsManager.whitecolor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Image.asset(
+          "assets/images/logo.png",
+          width: 32.sp,
+          height: 32.sp,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageIndicator(OnboardingProvider provider) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        _onboardingPages.length,
+        (index) => AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: EdgeInsets.symmetric(horizontal: 4.w),
+          width: provider.currentPage == index ? 32.w : 8.w,
+          height: 8.h,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4.r),
+            color: provider.currentPage == index
+                ? ColorsManager.whitecolor
+                : ColorsManager.whitecolor.withOpacity(0.3),
           ),
         ),
       ),
@@ -173,106 +243,108 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildOnboardingPage(OnboardingData data) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 32.w),
+    return Column(
+      children: [
+        // Image without box - just floating
+        Expanded(
+          child: Center(
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: AnimatedBuilder(
+                animation: _floatAnimation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _floatAnimation.value),
+                    child: child,
+                  );
+                },
+                child: Container(
+                  margin: EdgeInsets.symmetric(horizontal: 32.w),
+                  child: Image.asset(
+                    data.illustration,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        Icons.image,
+                        size: 80.sp,
+                        color: ColorsManager.whitecolor.withOpacity(0.5),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        SizedBox(height: 40.h),
+
+        // Title and subtitle
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 40.w),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // SVG Illustration
-              _buildSvgIllustration(data),
-
-              SizedBox(height: 56.h),
-
-              // Title
               Text(
                 data.title,
                 style: TextStyles.heading1.copyWith(
-                  fontSize: 32.sp,
+                  fontSize: 28.sp,
                   fontWeight: FontWeight.w700,
-                  color: ColorsManager.primaryDark,
-                  height: 1.2,
-                  letterSpacing: -0.5,
+                  color: ColorsManager.whitecolor,
+                  height: 1.3,
                 ),
                 textAlign: TextAlign.center,
               ),
-
-              SizedBox(height: 16.h),
-
-              // Subtitle
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.w),
-                child: Text(
-                  data.subtitle,
-                  style: TextStyles.body.copyWith(
-                    fontSize: 16.sp,
-                    color: ColorsManager.greycolor,
-                    fontWeight: FontWeight.w400,
-                    height: 1.6,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 3,
+              SizedBox(height: 12.h),
+              Text(
+                data.subtitle,
+                style: TextStyles.body.copyWith(
+                  fontSize: 15.sp,
+                  color: ColorsManager.whitecolor.withOpacity(0.8),
+                  fontWeight: FontWeight.w400,
+                  height: 1.5,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
               ),
             ],
           ),
         ),
-      ),
+
+        SizedBox(height: 40.h),
+      ],
     );
   }
 
-  Widget _buildSvgIllustration(OnboardingData data) {
-    return SizedBox(
-      height: 320.h,
-      width: double.infinity,
-      child: Image.asset(
-        data.illustration,
-        height: 320.h,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => Center(
-          child: Icon(
-            Icons.coffee,
-            size: 120.sp,
-            color: ColorsManager.primary.withOpacity(0.3),
+  Widget _buildBottomButton(OnboardingProvider provider) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 40.w),
+      child: GestureDetector(
+        onTap: () => _handleNext(provider),
+        child: Container(
+          width: double.infinity,
+          height: 56.h,
+          decoration: BoxDecoration(
+            color: ColorsManager.whitecolor,
+            borderRadius: BorderRadius.circular(28.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              provider.isLastPage ? "Commencer" : "Suivant",
+              style: TextStyles.heading2.copyWith(
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w600,
+                color: ColorsManager.primary,
+              ),
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBottomSection(OnboardingProvider provider) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 32.h),
-      child: Row(
-        children: [
-          // Page Indicator (Dots)
-          SmoothPageIndicator(
-            controller: _pageController,
-            count: _onboardingPages.length,
-            effect: ExpandingDotsEffect(
-              activeDotColor: ColorsManager.primary,
-              dotColor: ColorsManager.softGrey,
-              dotHeight: 10.h,
-              dotWidth: 10.w,
-              spacing: 8.w,
-              expansionFactor: 4,
-            ),
-          ),
-
-          SizedBox(width: 16.w),
-
-          // Next/Get Started Button
-          Expanded(
-            child: ButtonWidget(
-              title: provider.isLastPage ? "Get Started" : "Next",
-              onTap: () => _handleNext(provider),
-              height: 56.h,
-            ),
-          ),
-        ],
       ),
     );
   }

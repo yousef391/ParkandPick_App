@@ -11,19 +11,20 @@ class OnboardingData {
 
   static List<OnboardingData> onboardingPages = [
     OnboardingData(
-      title: "Fresh Coffee",
-      subtitle: "Enjoy the aroma of freshly brewed coffee every day",
-      illustration: "assets/images/onboarding images.png",
+      title: "Bienvenue chez Park&Pick!",
+      subtitle: "Ton meilleur moment de la journée commence ici",
+      illustration: "assets/images/onboarding_ani.png",
     ),
     OnboardingData(
-      title: "Fast Service",
-      subtitle: "Get your coffee fast and hot with our optimized service",
-      illustration: "assets/images/onboarding images1.png",
+      title: "Une expérience attractive",
+      subtitle:
+          "Découvre une animation qui t'invite à vivre quelque chose d'unique",
+      illustration: "assets/images/onboarding_ani.png",
     ),
     OnboardingData(
-      title: "Relax & Enjoy",
-      subtitle: "Comfortable seats and cozy ambiance for your coffee break",
-      illustration: "assets/images/onboarding images2.png",
+      title: "Prêt à commencer?",
+      subtitle: "Profite de nos services et fais-toi plaisir dès maintenant",
+      illustration: "assets/images/onboarding_ani.png",
     ),
   ];
 }
