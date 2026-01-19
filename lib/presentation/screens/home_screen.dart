@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:testtt/core/extensions/sizedbox_extension.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/data/models/product_model.dart';
+import 'package:testtt/presentation/cubits/product/product_cubit.dart';
 import 'package:testtt/presentation/widgets/categoy_chip_widdget.dart';
-import 'package:testtt/presentation/widgets/delivery_options_widget.dart';
 import 'package:testtt/presentation/widgets/empty_state_widget.dart';
 import 'package:testtt/presentation/widgets/gretting_sectiond.dart';
 import 'package:testtt/presentation/widgets/nearby_stations_widget.dart';
 import 'package:testtt/presentation/widgets/product_card_widget.dart';
 import 'package:testtt/presentation/widgets/search_bar_widget.dart';
-import 'package:testtt/core/routes/app_pages.dart';
+import 'package:go_router/go_router.dart';
 
 /// Home Screen - Coffee Products List
 /// Features: Greeting, Search, Category Filter, Product Grid
@@ -23,9 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  String _selectedCategory = 'all';
   final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
   late AnimationController _greetingAnimationController;
   late Animation<double> _greetingFadeAnimation;
   late Animation<Offset> _greetingSlideAnimation;
@@ -43,7 +42,8 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _loadProducts();
+    // Load products on init
+    context.read<ProductCubit>().fetchProducts();
   }
 
   void _initializeAnimations() {
@@ -74,12 +74,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  void _loadProducts() {
-    // TODO: Load products from provider when API is ready
-    // final provider = Provider.of<ProductProvider>(context, listen: false);
-    // provider.fetchProducts();
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -87,126 +81,115 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  List<Product> _getFilteredProducts() {
-    // TODO: Replace with provider data
-    // final provider = Provider.of<ProductProvider>(context);
-    // List<Product> filtered = provider.products;
-
-    // Use centralized mock data from ProductExamples
-    List<Product> filtered = ProductExamples.getAllProducts();
-
-    if (_selectedCategory != 'all') {
-      filtered = filtered
-          .where((product) => product.category == _selectedCategory)
-          .toList();
-    }
-
-    if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((product) {
-        final nameLower = product.name.toLowerCase();
-        final descLower = product.description.toLowerCase();
-        final queryLower = _searchQuery.toLowerCase();
-        return nameLower.contains(queryLower) || descLower.contains(queryLower);
-      }).toList();
-    }
-
-    return filtered;
-  }
-
   void _clearFilters() {
-    setState(() {
-      _searchController.clear();
-      _searchQuery = '';
-      _selectedCategory = 'all';
-    });
+    final cubit = context.read<ProductCubit>();
+    _searchController.clear();
+    cubit.searchProducts('');
+    cubit.filterByCategory('all');
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredProducts = _getFilteredProducts();
-
     return Scaffold(
       backgroundColor: ColorsManager.whitecolor,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // Animated Greeting Section
-            SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _greetingFadeAnimation,
-                child: SlideTransition(
-                  position: _greetingSlideAnimation,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 16.h),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const GreetingSection(),
-                        SizedBox(height: 20.h),
-                        SearchBarWidget(
-                          controller: _searchController,
-                          searchQuery: _searchQuery,
-                          onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
-                            });
-                          },
-                          onClear: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
+        child: BlocBuilder<ProductCubit, ProductState>(
+          builder: (context, state) {
+            String selectedCategory = 'all';
+            List<Product> filteredProducts = [];
+            bool isLoading = false;
+            String searchQuery = '';
+
+            if (state is ProductLoaded) {
+              selectedCategory = state.selectedCategory;
+              filteredProducts = state.filteredProducts;
+              searchQuery = state.searchQuery;
+            } else if (state is ProductLoading) {
+              isLoading = true;
+            }
+
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                // Animated Greeting Section
+                SliverToBoxAdapter(
+                  child: FadeTransition(
+                    opacity: _greetingFadeAnimation,
+                    child: SlideTransition(
+                      position: _greetingSlideAnimation,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 16.h),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const GreetingSection(),
+                            SizedBox(height: 20.h),
+                            SearchBarWidget(
+                              controller: _searchController,
+                              searchQuery: searchQuery,
+                              onChanged: (value) {
+                                context
+                                    .read<ProductCubit>()
+                                    .searchProducts(value);
+                              },
+                              onClear: () {
+                                _searchController.clear();
+                                context.read<ProductCubit>().searchProducts('');
+                              },
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
 
-            // Nearby Stations Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(top: 8.h, bottom: 16.h),
-                child: const NearbyStationsWidget(),
-              ),
-            ),
-
-            // Delivery Options removed (DoorDash / Uber Eats)
-
-            // Category Chips
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 50.h,
-                child: ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: 20.w),
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: _categories.length,
-                  itemBuilder: (context, index) {
-                    final category = _categories[index];
-                    return CategoryChip(
-                      label: category['label']!,
-                      isSelected: _selectedCategory == category['id'],
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = category['id']!;
-                        });
-                      },
-                    );
-                  },
+                // Nearby Stations Section
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 8.h, bottom: 16.h),
+                    child: const NearbyStationsWidget(),
+                  ),
                 ),
-              ),
-            ),
 
-            SizedBox(height: 20.h).toSliver(),
+                // Category Chips
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 50.h,
+                    child: ListView.builder(
+                      padding: EdgeInsets.symmetric(horizontal: 20.w),
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: _categories.length,
+                      itemBuilder: (context, index) {
+                        final category = _categories[index];
+                        return CategoryChip(
+                          label: category['label']!,
+                          isSelected: selectedCategory == category['id'],
+                          onTap: () {
+                            context
+                                .read<ProductCubit>()
+                                .filterByCategory(category['id']!);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
 
-            // Products Grid or Empty State
-            filteredProducts.isEmpty
-                ? SliverToBoxAdapter(
+                SizedBox(height: 20.h).toSliver(),
+
+                // Products Grid or Empty State
+                if (isLoading)
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 200.h,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                  )
+                else if (filteredProducts.isEmpty)
+                  SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.only(
                         bottom: MediaQuery.of(context).viewInsets.bottom + 64.h,
@@ -214,14 +197,15 @@ class _HomeScreenState extends State<HomeScreen>
                       child: SizedBox(
                         height: MediaQuery.of(context).size.height * 0.5,
                         child: EmptyStateWidget(
-                          hasSearch: _searchQuery.isNotEmpty,
-                          hasFilter: _selectedCategory != 'all',
+                          hasSearch: searchQuery.isNotEmpty,
+                          hasFilter: selectedCategory != 'all',
                           onClearFilters: _clearFilters,
                         ),
                       ),
                     ),
                   )
-                : SliverPadding(
+                else
+                  SliverPadding(
                     padding: EdgeInsets.symmetric(horizontal: 20.w),
                     sliver: SliverGrid(
                       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -241,30 +225,24 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
 
-            // Bottom padding
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.of(context).viewInsets.bottom + 20.h,
-              ),
-            ),
-          ],
+                // Bottom padding
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: MediaQuery.of(context).viewInsets.bottom + 20.h,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
   void _navigateToProductDetail(Product product) {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.productDetails,
-      arguments: ProductDetailsArgs(
-        id: product.id,
-        image: product.imageUrl,
-        title: product.name,
-        price: product.price.toString(),
-        description: product.description,
-        category: product.category,
-      ),
+    context.push(
+      '/product/${product.id}',
+      extra: {'product': product},
     );
   }
 }

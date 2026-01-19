@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/data/onboarding_model.dart';
-import 'package:testtt/presentation/screens/sign_up.dart';
-import 'package:testtt/presentation/widgets/button_widget.dart';
-import 'package:testtt/providers/provider_onboarding.dart';
+import 'package:testtt/presentation/cubits/onboarding/onboarding_cubit.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -86,20 +85,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.dispose();
   }
 
-  void _handlePageChanged(int index, OnboardingProvider provider) {
-    provider.setPage(index);
+  void _handlePageChanged(int index, OnboardingCubit cubit) {
+    cubit.setPage(index);
     _scaleController.reset();
     _scaleController.forward();
   }
 
-  void _handleNext(OnboardingProvider provider) {
-    if (provider.isLastPage) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SignupScreen()),
-      );
+  void _handleNext(OnboardingCubit cubit, OnboardingState state) {
+    if (state.isLastPage) {
+      cubit.completeOnboarding();
+      context.go('/signup');
     } else {
-      provider.nextPage();
+      cubit.nextPage();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
@@ -112,8 +109,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Scaffold(
       backgroundColor: ColorsManager.primary,
       body: SafeArea(
-        child: Consumer<OnboardingProvider>(
-          builder: (context, provider, child) {
+        child: BlocBuilder<OnboardingCubit, OnboardingState>(
+          builder: (context, state) {
+            final cubit = context.read<OnboardingCubit>();
             return Stack(
               children: [
                 // Decorative circles
@@ -130,7 +128,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     SizedBox(height: 20.h),
 
                     // Page indicator dots
-                    _buildPageIndicator(provider),
+                    _buildPageIndicator(state),
 
                     SizedBox(height: 40.h),
 
@@ -140,7 +138,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         controller: _pageController,
                         itemCount: _onboardingPages.length,
                         onPageChanged: (index) =>
-                            _handlePageChanged(index, provider),
+                            _handlePageChanged(index, cubit),
                         physics: const BouncingScrollPhysics(),
                         itemBuilder: (context, index) {
                           return _buildOnboardingPage(_onboardingPages[index]);
@@ -149,7 +147,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
 
                     // Bottom button
-                    _buildBottomButton(provider),
+                    _buildBottomButton(cubit, state),
 
                     SizedBox(height: 40.h),
                   ],
@@ -221,7 +219,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildPageIndicator(OnboardingProvider provider) {
+  Widget _buildPageIndicator(OnboardingState state) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
@@ -229,11 +227,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         (index) => AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: EdgeInsets.symmetric(horizontal: 4.w),
-          width: provider.currentPage == index ? 32.w : 8.w,
+          width: state.currentPage == index ? 32.w : 8.w,
           height: 8.h,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4.r),
-            color: provider.currentPage == index
+            color: state.currentPage == index
                 ? ColorsManager.whitecolor
                 : ColorsManager.whitecolor.withOpacity(0.3),
           ),
@@ -315,11 +313,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildBottomButton(OnboardingProvider provider) {
+  Widget _buildBottomButton(OnboardingCubit cubit, OnboardingState state) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 40.w),
       child: GestureDetector(
-        onTap: () => _handleNext(provider),
+        onTap: () => _handleNext(cubit, state),
         child: Container(
           width: double.infinity,
           height: 56.h,
@@ -336,7 +334,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           child: Center(
             child: Text(
-              provider.isLastPage ? "Commencer" : "Suivant",
+              state.isLastPage ? "Commencer" : "Suivant",
               style: TextStyles.heading2.copyWith(
                 fontSize: 17.sp,
                 fontWeight: FontWeight.w600,

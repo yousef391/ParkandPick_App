@@ -48,10 +48,24 @@ class Station {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       address: json['address'] as String,
-      distanceMeters: json['distanceMeters'] as int,
-      etaMinutes: json['etaMinutes'] as int,
-      isOpen: json['isOpen'] as bool,
+      distanceMeters: json['distanceMeters'] as int? ?? 0,
+      etaMinutes: json['etaMinutes'] as int? ?? 0,
+      isOpen: json['isOpen'] as bool? ?? true,
       capacityInfo: json['capacityInfo'] as String?,
+    );
+  }
+
+  factory Station.fromSupabase(Map<String, dynamic> json) {
+    return Station(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      address: json['address'] as String,
+      distanceMeters: 0, // Calculated locally
+      etaMinutes: 15, // Calculated locally or mock
+      isOpen: json['is_active'] as bool? ?? true,
+      capacityInfo: null,
     );
   }
 

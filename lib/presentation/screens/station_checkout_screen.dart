@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/core/utils/price_formatter.dart';
 import 'package:testtt/data/models/station_model.dart';
+import 'package:testtt/presentation/cubits/cart/cart_cubit.dart';
+import 'package:testtt/presentation/cubits/location/location_cubit.dart';
+import 'package:testtt/presentation/cubits/order/order_cubit.dart';
+import 'package:testtt/presentation/cubits/station/station_cubit.dart';
+import 'package:testtt/presentation/cubits/payment/payment_cubit.dart';
+import 'package:testtt/presentation/cubits/payment/payment_state.dart';
 import 'package:testtt/presentation/widgets/Custom_checkout_appbar.dart';
 import 'package:testtt/presentation/widgets/order_item_card.dart';
 import 'package:testtt/presentation/widgets/delivery_method_selector.dart';
-import 'package:testtt/providers/cart_provider.dart';
-import 'package:testtt/providers/location_provider.dart';
-import 'package:testtt/providers/order_provider.dart';
-import 'package:testtt/providers/product_station_provider.dart';
 
 /// Station Map Checkout Screen
 /// User reviews order items, selects pickup station, and confirms
@@ -26,7 +28,6 @@ class StationCheckoutScreen extends StatefulWidget {
 }
 
 class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
-  late final WebViewController _paymentWebViewController;
   String _selectedDeliveryMethod = 'pickup';
   String? _selectedDeliveryType; // 'doordash' or 'ubereats'
   final MapController _mapController = MapController();
@@ -38,65 +39,27 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadStationsWithRealDistance();
     });
-
-    // Initialize payment WebViewController
-    _paymentWebViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            // Optionally handle progress
-          },
-          onPageStarted: (String url) {},
-          onPageFinished: (String url) {},
-          onHttpError: (HttpResponseError error) {},
-          onWebResourceError: (WebResourceError error) {},
-          onNavigationRequest: (NavigationRequest request) {
-            // Example: block YouTube
-            if (request.url.startsWith('https://www.youtube.com/')) {
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..loadRequest(
-          Uri.parse('https://parkandpick.order-online.ai/#/order/payment'));
   }
 
   /// Load stations using user's real GPS location for accurate distances
   Future<void> _loadStationsWithRealDistance() async {
-    final stationProvider = Provider.of<ProductStationProvider>(
-      context,
-      listen: false,
-    );
-    final locationProvider = Provider.of<LocationProvider>(
-      context,
-      listen: false,
-    );
+    final locationCubit = context.read<LocationCubit>();
+    final stationCubit = context.read<StationCubit>();
 
-    // Get user's current location
-    final position = locationProvider.currentPosition;
-
-    if (position != null) {
-      // Use real GPS coordinates for distance calculation
-      await stationProvider.loadStationsWithLocation(
-        position.latitude,
-        position.longitude,
-      );
+    // Check if we already have location
+    if (locationCubit.state is LocationLoaded) {
+      final pos = (locationCubit.state as LocationLoaded).position;
+      await stationCubit.loadStationsWithLocation(pos.latitude, pos.longitude);
     } else {
-      // Try to get location first
-      await locationProvider.getCurrentLocation();
-      final newPosition = locationProvider.currentPosition;
-
-      if (newPosition != null) {
-        await stationProvider.loadStationsWithLocation(
-          newPosition.latitude,
-          newPosition.longitude,
-        );
+      // Try to get location
+      final success = await locationCubit.getCurrentLocation();
+      if (success && locationCubit.state is LocationLoaded) {
+        final pos = (locationCubit.state as LocationLoaded).position;
+        await stationCubit.loadStationsWithLocation(
+            pos.latitude, pos.longitude);
       } else {
-        // Fallback to mock data if location unavailable
-        stationProvider.loadMockStations();
+        // Fallback or just load mock stations
+        stationCubit.loadMockStations();
       }
     }
   }
@@ -106,197 +69,253 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
     return Scaffold(
       backgroundColor: ColorsManager.whitecolor,
       appBar: CustomAppBAr(),
-      body: Consumer2<ProductStationProvider, CartProvider>(
-        builder: (context, stationProvider, cartProvider, child) {
-          return Column(
-            children: [
-              // Order Items Section
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: 20.w),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 16.h),
+      body: MultiBlocListener(
+        listeners: [
+          BlocListener<StationCubit, StationState>(
+            listener: (context, state) {
+              if (state is StationConfirmSuccess) {
+                // Confirm success handled in _handleConfirm logic or here
+                // But _handleConfirm waits for result, so maybe not needed here if logic is there.
+                // Actually StationCubit.confirmPickup returns boolean too.
+              } else if (state is StationError) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: ColorsManager.redAccent,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+        child: BlocBuilder<CartCubit, CartState>(
+          builder: (context, cartState) {
+            return BlocBuilder<StationCubit, StationState>(
+              builder: (context, stationState) {
+                // If stations are loading, show loader? Or just show UI with empty/loading state?
+                // For now, if initial, we show content, list might be empty.
 
-                      // Order Items Title
-                      Text(
-                        'Your Order',
-                        style: TextStyles.heading2.copyWith(
-                          fontSize: 20.sp,
-                          color: ColorsManager.blackcolor,
-                        ),
-                      ),
-                      SizedBox(height: 16.h),
+                final List<Station> stations =
+                    stationState is StationLoaded ? stationState.stations : [];
+                final Station? selectedStation = stationState is StationLoaded
+                    ? stationState.selectedStation
+                    : null;
+                final bool isConfirming = stationState is StationLoaded
+                    ? stationState.isConfirming
+                    : false;
 
-                      // Order Items List
-                      ...cartProvider.items.map(
-                        (item) => OrderItemCard(
-                          item: item,
-                          onRemove: () {
-                            cartProvider.removeFromCart(item.id, item.size);
-                          },
-                        ),
-                      ),
-
-                      SizedBox(height: 24.h),
-
-                      // Delivery Method Selection
-                      DeliveryMethodSelector(
-                        selectedMethod: _selectedDeliveryMethod,
-                        onChanged: (String method) {
-                          setState(() {
-                            _selectedDeliveryMethod = method;
-                            if (method == 'pickup') {
-                              _selectedDeliveryType = null;
-                            }
-                          });
-                        },
-                      ),
-                      SizedBox(height: 20.h),
-
-                      if (_selectedDeliveryMethod == 'delivery') ...[
-                        Text(
-                          'Sélectionnez le service de livraison',
-                          style: TextStyles.heading2.copyWith(
-                            fontSize: 18.sp,
-                            color: ColorsManager.blackcolor,
-                          ),
-                        ),
-                        SizedBox(height: 12.h),
-                        Row(
+                return Column(
+                  children: [
+                    // Order Items Section
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.symmetric(horizontal: 20.w),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(
-                                    () => _selectedDeliveryType = 'doordash'),
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                                  decoration: BoxDecoration(
-                                    color: _selectedDeliveryType == 'doordash'
-                                        ? ColorsManager.primary
-                                        : ColorsManager.softGrey,
-                                    borderRadius: BorderRadius.circular(12.r),
-                                    border: Border.all(
-                                      color: _selectedDeliveryType == 'doordash'
-                                          ? ColorsManager.primary
-                                          : ColorsManager.textfieldbordercolor,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.delivery_dining,
+                            SizedBox(height: 16.h),
+
+                            // Order Items Title
+                            Text(
+                              'Your Order',
+                              style: TextStyles.heading2.copyWith(
+                                fontSize: 20.sp,
+                                color: ColorsManager.blackcolor,
+                              ),
+                            ),
+                            SizedBox(height: 16.h),
+
+                            // Order Items List
+                            ...cartState.items.map(
+                              (item) => OrderItemCard(
+                                item: item,
+                                onRemove: () {
+                                  context
+                                      .read<CartCubit>()
+                                      .removeFromCart(item.id, item.size);
+                                },
+                              ),
+                            ),
+
+                            SizedBox(height: 24.h),
+
+                            // Delivery Method Selection
+                            DeliveryMethodSelector(
+                              selectedMethod: _selectedDeliveryMethod,
+                              onChanged: (String method) {
+                                setState(() {
+                                  _selectedDeliveryMethod = method;
+                                  if (method == 'pickup') {
+                                    _selectedDeliveryType = null;
+                                  }
+                                });
+                              },
+                            ),
+                            SizedBox(height: 20.h),
+
+                            if (_selectedDeliveryMethod == 'delivery') ...[
+                              Text(
+                                'Sélectionnez le service de livraison',
+                                style: TextStyles.heading2.copyWith(
+                                  fontSize: 18.sp,
+                                  color: ColorsManager.blackcolor,
+                                ),
+                              ),
+                              SizedBox(height: 12.h),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() =>
+                                          _selectedDeliveryType = 'doordash'),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                            vertical: 14.h),
+                                        decoration: BoxDecoration(
                                           color: _selectedDeliveryType ==
                                                   'doordash'
-                                              ? ColorsManager.whitecolor
-                                              : ColorsManager.darkblue,
-                                          size: 28.sp),
-                                      SizedBox(height: 8.h),
-                                      Text('DoorDash',
-                                          style: TextStyles.bodyBold.copyWith(
-                                              color: _selectedDeliveryType ==
-                                                      'doordash'
-                                                  ? ColorsManager.whitecolor
-                                                  : ColorsManager.darkblue,
-                                              fontSize: 14.sp)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 16.w),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(
-                                    () => _selectedDeliveryType = 'ubereats'),
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                                  decoration: BoxDecoration(
-                                    color: _selectedDeliveryType == 'ubereats'
-                                        ? ColorsManager.primary
-                                        : ColorsManager.softGrey,
-                                    borderRadius: BorderRadius.circular(12.r),
-                                    border: Border.all(
-                                      color: _selectedDeliveryType == 'ubereats'
-                                          ? ColorsManager.primary
-                                          : ColorsManager.textfieldbordercolor,
-                                      width: 1.5,
+                                              ? ColorsManager.primary
+                                              : ColorsManager.softGrey,
+                                          borderRadius:
+                                              BorderRadius.circular(12.r),
+                                          border: Border.all(
+                                            color: _selectedDeliveryType ==
+                                                    'doordash'
+                                                ? ColorsManager.primary
+                                                : ColorsManager
+                                                    .textfieldbordercolor,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.delivery_dining,
+                                                color: _selectedDeliveryType ==
+                                                        'doordash'
+                                                    ? ColorsManager.whitecolor
+                                                    : ColorsManager.darkblue,
+                                                size: 28.sp),
+                                            SizedBox(height: 8.h),
+                                            Text('DoorDash',
+                                                style: TextStyles.bodyBold.copyWith(
+                                                    color:
+                                                        _selectedDeliveryType ==
+                                                                'doordash'
+                                                            ? ColorsManager
+                                                                .whitecolor
+                                                            : ColorsManager
+                                                                .darkblue,
+                                                    fontSize: 14.sp)),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.delivery_dining,
+                                  SizedBox(width: 16.w),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(() =>
+                                          _selectedDeliveryType = 'ubereats'),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                            vertical: 14.h),
+                                        decoration: BoxDecoration(
                                           color: _selectedDeliveryType ==
                                                   'ubereats'
-                                              ? ColorsManager.whitecolor
-                                              : ColorsManager.darkblue,
-                                          size: 28.sp),
-                                      SizedBox(height: 8.h),
-                                      Text('UberEats',
-                                          style: TextStyles.bodyBold.copyWith(
-                                              color: _selectedDeliveryType ==
-                                                      'ubereats'
-                                                  ? ColorsManager.whitecolor
-                                                  : ColorsManager.darkblue,
-                                              fontSize: 14.sp)),
-                                    ],
+                                              ? ColorsManager.primary
+                                              : ColorsManager.softGrey,
+                                          borderRadius:
+                                              BorderRadius.circular(12.r),
+                                          border: Border.all(
+                                            color: _selectedDeliveryType ==
+                                                    'ubereats'
+                                                ? ColorsManager.primary
+                                                : ColorsManager
+                                                    .textfieldbordercolor,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.delivery_dining,
+                                                color: _selectedDeliveryType ==
+                                                        'ubereats'
+                                                    ? ColorsManager.whitecolor
+                                                    : ColorsManager.darkblue,
+                                                size: 28.sp),
+                                            SizedBox(height: 8.h),
+                                            Text('UberEats',
+                                                style: TextStyles.bodyBold.copyWith(
+                                                    color:
+                                                        _selectedDeliveryType ==
+                                                                'ubereats'
+                                                            ? ColorsManager
+                                                                .whitecolor
+                                                            : ColorsManager
+                                                                .darkblue,
+                                                    fontSize: 14.sp)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                ],
+                              ),
+                              SizedBox(height: 24.h),
+                            ],
+
+                            if (_selectedDeliveryMethod == 'pickup') ...[
+                              // Station Selection Dropdown
+                              Text(
+                                'Select Pickup Station',
+                                style: TextStyles.heading2.copyWith(
+                                  fontSize: 18.sp,
+                                  color: ColorsManager.blackcolor,
                                 ),
                               ),
-                            ),
+                              SizedBox(height: 12.h),
+                              _buildStationDropdown(stations, selectedStation),
+                              SizedBox(height: 24.h),
+                            ],
+
+                            // Map Section
+                            if (selectedStation != null) ...[
+                              Text(
+                                'Station Location',
+                                style: TextStyles.heading2.copyWith(
+                                  fontSize: 18.sp,
+                                  color: ColorsManager.blackcolor,
+                                ),
+                              ),
+                              SizedBox(height: 12.h),
+                              _buildMap(selectedStation),
+                              SizedBox(height: 16.h),
+                              _buildStationInfoCard(selectedStation),
+                            ],
+
+                            SizedBox(height: 100.h), // Space for bottom bar
                           ],
                         ),
-                        SizedBox(height: 24.h),
-                      ],
+                      ),
+                    ),
 
-                      if (_selectedDeliveryMethod == 'pickup') ...[
-                        // Station Selection Dropdown
-                        Text(
-                          'Select Pickup Station',
-                          style: TextStyles.heading2.copyWith(
-                            fontSize: 18.sp,
-                            color: ColorsManager.blackcolor,
-                          ),
-                        ),
-                        SizedBox(height: 12.h),
-                        _buildStationDropdown(stationProvider),
-                        SizedBox(height: 24.h),
-                      ],
-
-                      // Map Section
-                      if (stationProvider.selectedStation != null) ...[
-                        Text(
-                          'Station Location',
-                          style: TextStyles.heading2.copyWith(
-                            fontSize: 18.sp,
-                            color: ColorsManager.blackcolor,
-                          ),
-                        ),
-                        SizedBox(height: 12.h),
-                        _buildMap(stationProvider),
-                        SizedBox(height: 16.h),
-                        _buildStationInfoCard(stationProvider.selectedStation!),
-                      ],
-
-                      SizedBox(height: 100.h), // Space for bottom bar
-                    ],
-                  ),
-                ),
-              ),
-
-              // Bottom Total & Confirm Section
-              _buildBottomSection(stationProvider, cartProvider),
-            ],
-          );
-        },
+                    // Bottom Total & Confirm Section
+                    _buildBottomSection(
+                        selectedStation, isConfirming, cartState.total),
+                  ],
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildStationDropdown(ProductStationProvider provider) {
+  Widget _buildStationDropdown(
+      List<Station> stations, Station? selectedStation) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
       decoration: BoxDecoration(
@@ -307,14 +326,14 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           isExpanded: true,
-          value: provider.selectedStation?.id,
+          value: selectedStation?.id,
           hint: Text(
             'Choose a station',
             style: TextStyles.body.copyWith(color: ColorsManager.greycolor),
           ),
           icon:
               Icon(Icons.keyboard_arrow_down, color: ColorsManager.blackcolor),
-          items: provider.stations.map((station) {
+          items: stations.map((station) {
             return DropdownMenuItem<String>(
               value: station.id,
               child: Row(
@@ -347,8 +366,13 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
           }).toList(),
           onChanged: (stationId) {
             if (stationId != null) {
-              provider.selectStation(stationId);
-              _animateMapToStation(provider.selectedStation!);
+              final stationCubit = context.read<StationCubit>();
+              stationCubit.selectStation(stationId);
+              // We find the station to animate to it
+              try {
+                final station = stations.firstWhere((s) => s.id == stationId);
+                _animateMapToStation(station);
+              } catch (e) {/* ignore */}
             }
           },
         ),
@@ -356,9 +380,7 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
     );
   }
 
-  Widget _buildMap(ProductStationProvider provider) {
-    final selectedStation = provider.selectedStation!;
-
+  Widget _buildMap(Station selectedStation) {
     return Container(
       height: 280.h,
       decoration: BoxDecoration(
@@ -530,13 +552,12 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
   }
 
   Widget _buildBottomSection(
-    ProductStationProvider stationProvider,
-    CartProvider cartProvider,
+    Station? selectedStation,
+    bool isConfirming,
+    double totalPrice,
   ) {
-    final totalPrice = cartProvider.total;
-    final canConfirm = stationProvider.selectedStation != null &&
-        stationProvider.selectedStation!.isOpen &&
-        !stationProvider.isConfirming;
+    final canConfirm =
+        selectedStation != null && selectedStation.isOpen && !isConfirming;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
@@ -577,56 +598,87 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
             ),
             SizedBox(height: 16.h),
 
-            // Confirm Button
-            SizedBox(
-              width: double.infinity,
-              height: 48.h,
-              child: ElevatedButton(
-                onPressed:
-                    canConfirm ? () => _handleConfirm(stationProvider) : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: canConfirm
-                      ? ColorsManager.primary
-                      : ColorsManager.greycolor,
-                  foregroundColor: ColorsManager.whitecolor,
-                  elevation: 0,
-                  disabledBackgroundColor: ColorsManager.greycolor.withOpacity(
-                    0.5,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                ),
-                child: stationProvider.isConfirming
-                    ? SizedBox(
-                        width: 24.w,
-                        height: 24.h,
-                        child: CircularProgressIndicator(
-                          color: ColorsManager.whitecolor,
-                          strokeWidth: 2.5,
+            // Checkout Button
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 24.h),
+              child: Hero(
+                tag: 'checkout_button',
+                child: BlocConsumer<PaymentCubit, PaymentState>(
+                  listener: (context, paymentState) {
+                    if (paymentState is PaymentReady) {
+                      _handlePresentPayment();
+                    } else if (paymentState is PaymentSuccess) {
+                      _handleOrderCreation();
+                    } else if (paymentState is PaymentFailure) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(paymentState.message),
+                          backgroundColor: Colors.red,
                         ),
-                      )
-                    : Text(
-                        'Confirm Order',
-                        style: TextStyles.buttonText.copyWith(fontSize: 16.sp),
+                      );
+                    }
+                  },
+                  builder: (context, paymentState) {
+                    final isLoading = paymentState is PaymentLoading ||
+                        context.read<StationCubit>().state is StationLoading;
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: ColorsManager.primary.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : _handleCheckoutProcess,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ColorsManager.primary,
+                          disabledBackgroundColor:
+                              ColorsManager.primary.withOpacity(0.6),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 18.h),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16.r),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (isLoading)
+                              SizedBox(
+                                width: 24.w,
+                                height: 24.w,
+                                child: const CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            else ...[
+                              const Text(
+                                'Confirm & Pay',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              const Icon(Icons.arrow_forward_rounded, size: 24),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
 
-            // Error Message
-            if (stationProvider.errorMessage != null) ...[
-              SizedBox(height: 12.h),
-              Text(
-                stationProvider.errorMessage!,
-                style: TextStyles.smallText.copyWith(
-                  color: ColorsManager.redAccent,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-
             // Station not selected warning
-            if (stationProvider.selectedStation == null) ...[
+            if (selectedStation == null) ...[
               SizedBox(height: 12.h),
               Text(
                 'Please select a pickup station',
@@ -638,8 +690,7 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
             ],
 
             // Station closed warning
-            if (stationProvider.selectedStation != null &&
-                !stationProvider.selectedStation!.isOpen) ...[
+            if (selectedStation != null && !selectedStation.isOpen) ...[
               SizedBox(height: 12.h),
               Text(
                 'Selected station is currently closed',
@@ -655,52 +706,66 @@ class _StationCheckoutScreenState extends State<StationCheckoutScreen> {
     );
   }
 
-  Future<void> _handleConfirm(ProductStationProvider stationProvider) async {
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-
-    final success = await stationProvider.confirmPickup('ORDER_ID_PLACEHOLDER');
-
-    if (success && mounted) {
-      // Create order from cart items
-      final order = orderProvider.createOrder(
-        items: cartProvider.items,
-        station: stationProvider.selectedStation!,
-        totalPrice: cartProvider.total,
-      );
-
-      // Clear the cart after order is created
-      cartProvider.clearCart();
-
-      // Show success message
+  Future<void> _handleCheckoutProcess() async {
+    // 1. Validate Delivery Method
+    final locationState = context.read<LocationCubit>().state;
+    if (_selectedDeliveryMethod == 'delivery' &&
+        locationState is! LocationLoaded) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Commande ${order.id} confirmée à ${stationProvider.selectedStation!.name}',
-            style: TextStyles.body.copyWith(color: ColorsManager.whitecolor),
-          ),
-          backgroundColor: ColorsManager.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.r),
-          ),
-        ),
+        const SnackBar(content: Text('Please select a delivery location')),
       );
+      return;
+    }
 
-      // Open payment webview
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => Scaffold(
-            appBar: AppBar(
-              title: const Text('Paiement'),
-            ),
-            body: WebViewWidget(controller: _paymentWebViewController),
-          ),
-        ),
-      );
+    if (_selectedDeliveryMethod == 'pickup') {
+      final stationState = context.read<StationCubit>().state;
+      if (stationState is! StationLoaded ||
+          stationState.selectedStation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a pickup station')),
+        );
+        return;
+      }
+    }
 
-      // Navigate back to home screen
-      Navigator.of(context).pop();
+    // 2. Init Payment Sheet
+    final total = context.read<CartCubit>().state.total;
+    // Amount in cents (e.g., $10.00 = 1000)
+    final amountInCents = (total * 100).round().toDouble();
+
+    await context.read<PaymentCubit>().initPaymentSheet(amountInCents);
+  }
+
+  Future<void> _handlePresentPayment() async {
+    await context.read<PaymentCubit>().presentPaymentSheet();
+  }
+
+  Future<void> _handleOrderCreation() async {
+    final cartState = context.read<CartCubit>().state;
+    final stationState = context.read<StationCubit>().state;
+
+    if (stationState is StationLoaded && stationState.selectedStation != null) {
+      // Show local loading if needed, or rely on OrderCubit state
+      // But we are already in "Success" of payment, so user expects navigation.
+
+      await context.read<OrderCubit>().createOrder(
+            items: cartState.items,
+            station: stationState.selectedStation!,
+            totalPrice: cartState.total,
+          );
+
+      if (!mounted) return;
+
+      final orderState = context.read<OrderCubit>().state;
+      if (orderState is OrderError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Order failed to save: ${orderState.message}')),
+        );
+      } else {
+        context.read<CartCubit>().clearCart();
+        context.pushReplacement('/order-success');
+      }
     }
   }
 }

@@ -46,6 +46,27 @@ class OrderItem {
     );
   }
 
+  /// Create from Supabase JSON (snake_case with joined products)
+  factory OrderItem.fromSupabase(Map<String, dynamic> json) {
+    // The query will look like: order_items(..., products(name, image_url, price))
+    final product = json['products'] as Map<String, dynamic>?;
+
+    return OrderItem(
+      id: json['product_id']
+          as String, // Use product_id as the item ID for display match
+      name: product?['name'] as String? ?? 'Unknown Product',
+      size: json['size'] as String? ?? 'M',
+      // If price_at_time is recorded in order_items, use it. Otherwise use current product price
+      price: (json['price_at_time'] as num?)?.toDouble() ??
+          (product?['price'] as num?)?.toDouble() ??
+          0.0,
+      imagePath:
+          product?['image_url'] as String? ?? 'assets/images/default.png',
+      quantity: json['quantity'] as int? ?? 1,
+      addons: [], // Addons support later
+    );
+  }
+
   /// Copy with updated values
   OrderItem copyWith({
     String? id,

@@ -90,6 +90,49 @@ class Order {
     );
   }
 
+  /// Create from Supabase DB (snake_case)
+  factory Order.fromSupabase(Map<String, dynamic> json) {
+    final itemsJson = json['order_items'] as List<dynamic>? ?? [];
+    final items =
+        itemsJson.map((item) => OrderItem.fromSupabase(item)).toList();
+
+    return Order(
+      id: json['id'] as String,
+      items: items,
+      stationId: json['station_id'] as String,
+      // Handle joined station data or fallback to empty string/ID if missing
+      stationName: json['stations']?['name'] as String? ?? 'Unknown Station',
+      stationAddress: json['stations']?['address'] as String? ?? '',
+      totalPrice: (json['total_price'] as num).toDouble(),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      status: OrderStatus.values.firstWhere(
+        (e) => e.toString().split('.').last == json['status'],
+        orElse: () => OrderStatus.pending,
+      ),
+      estimatedMinutes: json['estimated_minutes'],
+    );
+  }
+
+  /// Create payload for Supabase insertion
+  static Map<String, dynamic> createSupabasePayload({
+    required String userId,
+    required String stationId,
+    required String stationName,
+    required String stationAddress,
+    required double totalPrice,
+    required int estimatedMinutes,
+  }) {
+    return {
+      'user_id': userId,
+      'station_id': stationId,
+      // 'station_name': stationName, // Not in DB schema
+      // 'station_address': stationAddress, // Not in DB schema
+      'total_price': totalPrice,
+      'status': 'pending',
+      'estimated_minutes': estimatedMinutes,
+    };
+  }
+
   /// Copy with updated values
   Order copyWith({
     String? id,

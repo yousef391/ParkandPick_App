@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:provider/provider.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/core/utils/price_formatter.dart';
 import 'package:testtt/data/models/product_model.dart';
+import 'package:testtt/presentation/cubits/favorites/favorites_cubit.dart';
 import 'package:testtt/presentation/widgets/empty_state_widget.dart';
-import 'package:testtt/providers/favorites_provider.dart';
 import 'package:testtt/core/routes/app_pages.dart';
 
 /// Favorites Screen
-/// Displays user's favorite products with provider-driven data
-class FavoritesScreen extends StatelessWidget {
+/// Displays user's favorite products with cubit-driven data
+class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
+
+  @override
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
+}
+
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<FavoritesCubit>().loadFavorites();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,18 +41,16 @@ class FavoritesScreen extends StatelessWidget {
         ),
         centerTitle: false,
       ),
-      body: Consumer<FavoritesProvider>(
-        builder: (context, provider, _) {
-          if (!provider.isLoading && provider.favorites.isEmpty) {
-            Future.microtask(() => provider.loadFavorites());
-          }
-          if (provider.isLoading) {
+      body: BlocBuilder<FavoritesCubit, FavoritesState>(
+        builder: (context, state) {
+          if (state.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (provider.isEmpty) {
+          if (state.isEmpty) {
             return const EmptyStateWidget(hasSearch: false, hasFilter: false);
           }
-          final favorites = provider.favorites;
+          final favorites = state.favorites;
+          final favoritesCubit = context.read<FavoritesCubit>();
           return ListView.separated(
             padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
             itemCount: favorites.length,
@@ -64,7 +73,7 @@ class FavoritesScreen extends StatelessWidget {
                     ),
                   );
                 },
-                onToggleFavorite: () => provider.toggleFavorite(product),
+                onToggleFavorite: () => favoritesCubit.toggleFavorite(product),
               );
             },
           );

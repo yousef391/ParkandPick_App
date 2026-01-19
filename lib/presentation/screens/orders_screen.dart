@@ -1,16 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/utils/price_formatter.dart';
 import 'package:testtt/data/models/order_model.dart';
+import 'package:testtt/presentation/cubits/order/order_cubit.dart';
 import 'package:testtt/presentation/widgets/empty_state_widget.dart';
-import 'package:testtt/providers/order_provider.dart';
 
 /// Orders Screen - Displays order history
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
+
+  @override
+  State<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends State<OrdersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<OrderCubit>().loadOrders();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,23 +40,57 @@ class OrdersScreen extends StatelessWidget {
         ),
         centerTitle: false,
       ),
-      body: Consumer<OrderProvider>(
-        builder: (context, orderProvider, _) {
-          if (!orderProvider.hasOrders) {
-            return EmptyStateWidget(
-              hasSearch: false,
-              hasFilter: false,
+      body: BlocBuilder<OrderCubit, OrderState>(
+        builder: (context, state) {
+          if (state is OrderLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (state is OrderError) {
+            return Center(child: Text(state.message));
+          }
+
+          if (state is OrderLoaded) {
+            if (!state.hasOrders) {
+              return const EmptyStateWidget(
+                hasSearch: false,
+                hasFilter: false,
+              );
+            }
+
+            final orders = state.orders;
+            final hasReachedMax = state.hasReachedMax;
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                await context.read<OrderCubit>().loadOrders(refresh: true);
+              },
+              child: ListView.builder(
+                // Add controller or use NotificationListener
+                // Using NotificationListener is cleaner for simple pagination
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+                itemCount: hasReachedMax ? orders.length : orders.length + 1,
+                itemBuilder: (context, index) {
+                  if (index >= orders.length) {
+                    // Bottom loader
+                    context.read<OrderCubit>().loadMoreOrders();
+                    return Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.h),
+                        child: const CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  final order = orders[index];
+                  return _OrderCard(order: order);
+                },
+              ),
             );
           }
 
-          return ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-            itemCount: orderProvider.orders.length,
-            itemBuilder: (context, index) {
-              final order = orderProvider.orders[index];
-              return _OrderCard(order: order);
-            },
-          );
+          // Initial state or other defaults
+          return const Center(child: SizedBox());
         },
       ),
     );
@@ -93,7 +138,7 @@ class _OrderCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      order.id,
+                      '#${order.id.substring(0, 8).toUpperCase()}',
                       style: GoogleFonts.roboto(
                         fontSize: 16.sp,
                         fontWeight: FontWeight.w700,
@@ -121,6 +166,7 @@ class _OrderCard extends StatelessWidget {
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w500,
                           color: ColorsManager.blackcolor,
+                          decoration: TextDecoration.none,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -262,6 +308,7 @@ class _OrderCard extends StatelessWidget {
           fontSize: 12.sp,
           fontWeight: FontWeight.w600,
           color: textColor,
+          decoration: TextDecoration.none,
         ),
       ),
     );
@@ -348,14 +395,16 @@ class _OrderDetailsSheet extends StatelessWidget {
                     fontSize: 20.sp,
                     fontWeight: FontWeight.w700,
                     color: ColorsManager.blackcolor,
+                    decoration: TextDecoration.none,
                   ),
                 ),
                 Text(
-                  order.id,
+                  '#${order.id.substring(0, 8).toUpperCase()}',
                   style: GoogleFonts.roboto(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w500,
                     color: ColorsManager.greycolor,
+                    decoration: TextDecoration.none,
                   ),
                 ),
               ],
@@ -383,19 +432,23 @@ class _OrderDetailsSheet extends StatelessWidget {
                       // Image
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8.r),
-                        child: Image.asset(
-                          item.imagePath,
-                          width: 50.w,
-                          height: 50.w,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 50.w,
-                            height: 50.w,
-                            color: ColorsManager.greycolor.withOpacity(0.2),
-                            child: Icon(Icons.coffee,
-                                color: ColorsManager.greycolor),
-                          ),
-                        ),
+                        child: item.imagePath.startsWith('http')
+                            ? Image.network(
+                                item.imagePath,
+                                width: 50.w,
+                                height: 50.w,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(),
+                              )
+                            : Image.asset(
+                                item.imagePath,
+                                width: 50.w,
+                                height: 50.w,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(),
+                              ),
                       ),
                       SizedBox(width: 12.w),
 
@@ -410,6 +463,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                                 fontSize: 14.sp,
                                 fontWeight: FontWeight.w600,
                                 color: ColorsManager.blackcolor,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                             SizedBox(height: 4.h),
@@ -418,6 +472,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                               style: GoogleFonts.roboto(
                                 fontSize: 12.sp,
                                 color: ColorsManager.greycolor,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                           ],
@@ -431,6 +486,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
                           color: ColorsManager.blackcolor,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ],
@@ -476,6 +532,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                                 fontSize: 14.sp,
                                 fontWeight: FontWeight.w600,
                                 color: ColorsManager.blackcolor,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                             Text(
@@ -483,6 +540,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                               style: GoogleFonts.roboto(
                                 fontSize: 12.sp,
                                 color: ColorsManager.greycolor,
+                                decoration: TextDecoration.none,
                               ),
                             ),
                           ],
@@ -502,6 +560,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                           fontSize: 18.sp,
                           fontWeight: FontWeight.w600,
                           color: ColorsManager.blackcolor,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                       Text(
@@ -510,6 +569,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                           fontSize: 22.sp,
                           fontWeight: FontWeight.w700,
                           color: ColorsManager.primary,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ],
@@ -520,6 +580,15 @@ class _OrderDetailsSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      width: 50.w,
+      height: 50.w,
+      color: ColorsManager.greycolor.withOpacity(0.2),
+      child: Icon(Icons.coffee, color: ColorsManager.greycolor),
     );
   }
 }

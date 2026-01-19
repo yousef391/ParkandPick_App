@@ -1,13 +1,16 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:provider/provider.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
+import 'package:testtt/presentation/cubits/cart/cart_cubit.dart';
 import 'package:testtt/presentation/screens/account_screen.dart';
 import 'package:testtt/presentation/screens/cart_screen.dart';
 import 'package:testtt/presentation/screens/home_screen.dart';
 import 'package:testtt/presentation/screens/orders_screen.dart';
-import 'package:testtt/providers/cart_provider.dart';
 
 /// Home Shell - Main navigation container
 /// Manages bottom navigation and tab switching
@@ -31,77 +34,67 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          height: 70.h,
-          decoration: BoxDecoration(
-            color: ColorsManager.whitecolor,
-            boxShadow: [
-              BoxShadow(
-                color: ColorsManager.blackcolor.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
-              ),
-            ],
+      body: Stack(
+        children: [
+          // Main content
+          IndexedStack(
+            index: _currentIndex,
+            children: _screens,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home,
-                label: 'Home',
-                index: 0,
+
+          // Floating Blur Bottom Nav
+          Positioned(
+            left: 16.w,
+            right: 16.w,
+            bottom: 20.h,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24.r),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  height: 65.h,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(24.r),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(CupertinoIcons.house_fill, 'Home', 0),
+                      _buildCartItem(),
+                      _buildNavItem(CupertinoIcons.doc_text_fill, 'Orders', 2),
+                      _buildNavItem(CupertinoIcons.person_fill, 'Account', 3),
+                    ],
+                  ),
+                ),
               ),
-              _buildCartNavItem(),
-              _buildNavItem(
-                icon: Icons.receipt_long_outlined,
-                activeIcon: Icons.receipt_long,
-                label: 'Orders',
-                index: 2,
-              ),
-              _buildNavItem(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
-                label: 'Account',
-                index: 3,
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildNavItem({
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required int index,
-  }) {
+  Widget _buildNavItem(IconData icon, String label, int index) {
     final isActive = _currentIndex == index;
-    return InkWell(
+    return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
-      child: Container(
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isActive ? activeIcon : icon,
-              color: isActive ? ColorsManager.primary : ColorsManager.greycolor,
-              size: 24.sp,
+              icon,
+              color: isActive ? ColorsManager.primary : Colors.grey,
+              size: 22.sp,
             ),
-            SizedBox(height: 4.h),
+            SizedBox(height: 2.h),
             Text(
               label,
-              style: TextStyles.smallText.copyWith(
-                color:
-                    isActive ? ColorsManager.primary : ColorsManager.greycolor,
+              style: TextStyle(
+                color: isActive ? ColorsManager.primary : Colors.grey,
                 fontSize: 10.sp,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -112,51 +105,43 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  Widget _buildCartNavItem() {
+  Widget _buildCartItem() {
     final isActive = _currentIndex == 1;
-    return InkWell(
+    return GestureDetector(
       onTap: () => setState(() => _currentIndex = 1),
-      child: Container(
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Consumer<CartProvider>(
-              builder: (context, cart, child) {
+            BlocBuilder<CartCubit, CartState>(
+              builder: (context, state) {
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Icon(
-                      isActive
-                          ? Icons.shopping_cart
-                          : Icons.shopping_cart_outlined,
-                      color: isActive
-                          ? ColorsManager.primary
-                          : ColorsManager.greycolor,
-                      size: 24.sp,
+                      CupertinoIcons.cart_fill,
+                      color: isActive ? ColorsManager.primary : Colors.grey,
+                      size: 22.sp,
                     ),
-                    if (cart.itemCount > 0)
+                    if (state.itemCount > 0)
                       Positioned(
                         right: -6,
                         top: -4,
                         child: Container(
                           padding: EdgeInsets.all(4.w),
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             color: ColorsManager.primary,
                             shape: BoxShape.circle,
                           ),
-                          constraints: BoxConstraints(
-                            minWidth: 16.w,
-                            minHeight: 16.w,
-                          ),
                           child: Text(
-                            cart.itemCount > 9 ? '9+' : '${cart.itemCount}',
-                            style: TextStyles.smallText.copyWith(
-                              color: ColorsManager.whitecolor,
-                              fontSize: 9.sp,
-                              fontWeight: FontWeight.w600,
+                            '${state.itemCount}',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 8.sp,
+                              fontWeight: FontWeight.bold,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                         ),
                       ),
@@ -164,12 +149,11 @@ class _HomeShellState extends State<HomeShell> {
                 );
               },
             ),
-            SizedBox(height: 4.h),
+            SizedBox(height: 2.h),
             Text(
-              'Mon Panier',
-              style: TextStyles.smallText.copyWith(
-                color:
-                    isActive ? ColorsManager.primary : ColorsManager.greycolor,
+              'Cart',
+              style: TextStyle(
+                color: isActive ? ColorsManager.primary : Colors.grey,
                 fontSize: 10.sp,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),

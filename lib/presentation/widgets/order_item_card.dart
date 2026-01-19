@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:provider/provider.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/core/utils/price_formatter.dart';
 import 'package:testtt/data/models/order_item.dart';
-import 'package:testtt/providers/cart_provider.dart';
+import 'package:testtt/presentation/cubits/cart/cart_cubit.dart';
 
 /// Reusable Order Item Card Widget
 /// Displays order item with swipe-to-dismiss functionality
@@ -74,9 +74,8 @@ class _OrderItemCardState extends State<OrderItemCard>
               label: 'Undo',
               textColor: ColorsManager.whitecolor,
               onPressed: () {
-                // Restore item via provider
-                final cartProvider = context.read<CartProvider>();
-                cartProvider.addToCart(widget.item);
+                // Restore item via cubit
+                context.read<CartCubit>().addToCart(widget.item);
               },
             ),
             shape: RoundedRectangleBorder(
@@ -231,50 +230,47 @@ class _OrderItemCardState extends State<OrderItemCard>
   }
 
   Widget _buildQuantityControls() {
-    return Consumer<CartProvider>(
-      builder: (context, cartProvider, _) {
-        return Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: ColorsManager.textfieldbordercolor),
-            borderRadius: BorderRadius.circular(8.r),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildQuantityButton(
-                icon: Icons.remove,
-                onTap: () {
-                  cartProvider.decrementQuantity(
+    // We don't need Consumer/BlocBuilder here because parent rebuilds on state change
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: ColorsManager.textfieldbordercolor),
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildQuantityButton(
+            icon: Icons.remove,
+            onTap: () {
+              context.read<CartCubit>().decrementQuantity(
                     widget.item.id,
                     size: widget.item.size,
                   );
-                },
+            },
+          ),
+          Container(
+            width: 36.w,
+            alignment: Alignment.center,
+            child: Text(
+              '${widget.item.quantity}',
+              style: TextStyles.body.copyWith(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w600,
+                color: ColorsManager.primaryDark,
               ),
-              Container(
-                width: 36.w,
-                alignment: Alignment.center,
-                child: Text(
-                  '${widget.item.quantity}',
-                  style: TextStyles.body.copyWith(
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.w600,
-                    color: ColorsManager.primaryDark,
-                  ),
-                ),
-              ),
-              _buildQuantityButton(
-                icon: Icons.add,
-                onTap: () {
-                  cartProvider.incrementQuantity(
+            ),
+          ),
+          _buildQuantityButton(
+            icon: Icons.add,
+            onTap: () {
+              context.read<CartCubit>().incrementQuantity(
                     widget.item.id,
                     size: widget.item.size,
                   );
-                },
-              ),
-            ],
+            },
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 

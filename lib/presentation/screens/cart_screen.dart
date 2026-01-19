@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/utils/price_formatter.dart';
-import 'package:testtt/presentation/screens/station_checkout_screen.dart';
-import 'package:testtt/providers/cart_provider.dart';
+import 'package:testtt/presentation/cubits/cart/cart_cubit.dart';
 
 /// Cart Screen - View and manage cart items before checkout
 class CartScreen extends StatelessWidget {
@@ -36,12 +36,12 @@ class CartScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: Consumer<CartProvider>(
-        builder: (context, cartProvider, child) {
-          if (cartProvider.isEmpty) {
+      body: BlocBuilder<CartCubit, CartState>(
+        builder: (context, state) {
+          if (state.isEmpty) {
             return _buildEmptyCart(context);
           }
-          return _buildCartContent(context, cartProvider);
+          return _buildCartContent(context, state);
         },
       ),
     );
@@ -105,29 +105,30 @@ class CartScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCartContent(BuildContext context, CartProvider cartProvider) {
+  Widget _buildCartContent(BuildContext context, CartState state) {
+    final cartCubit = context.read<CartCubit>();
     return Column(
       children: [
         // Cart Items List
         Expanded(
           child: ListView.builder(
             padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-            itemCount: cartProvider.items.length,
+            itemCount: state.items.length,
             itemBuilder: (context, index) {
-              final item = cartProvider.items[index];
+              final item = state.items[index];
               return Padding(
                 padding: EdgeInsets.only(bottom: 12.h),
                 child: _CartItemCard(
                   item: item,
-                  onIncrement: () => cartProvider.incrementQuantity(
+                  onIncrement: () => cartCubit.incrementQuantity(
                     item.id,
                     size: item.size,
                   ),
-                  onDecrement: () => cartProvider.decrementQuantity(
+                  onDecrement: () => cartCubit.decrementQuantity(
                     item.id,
                     size: item.size,
                   ),
-                  onRemove: () => cartProvider.removeFromCart(
+                  onRemove: () => cartCubit.removeFromCart(
                     item.id,
                     item.size,
                   ),
@@ -138,14 +139,14 @@ class CartScreen extends StatelessWidget {
         ),
 
         // Bottom Section - Total & Checkout
-        _buildBottomSection(context, cartProvider),
+        _buildBottomSection(context, state),
       ],
     );
   }
 
-  Widget _buildBottomSection(BuildContext context, CartProvider cartProvider) {
+  Widget _buildBottomSection(BuildContext context, CartState state) {
     return Container(
-      padding: EdgeInsets.all(20.w),
+      padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 80.h),
       decoration: BoxDecoration(
         color: ColorsManager.whitecolor,
         border: Border(
@@ -161,14 +162,14 @@ class CartScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${cartProvider.itemCount} article${cartProvider.itemCount > 1 ? 's' : ''}',
+                  '${state.itemCount} article${state.itemCount > 1 ? 's' : ''}',
                   style: GoogleFonts.roboto(
                     fontSize: 14.sp,
                     color: ColorsManager.greycolor,
                   ),
                 ),
                 Text(
-                  PriceFormatter.formatPriceCAD(cartProvider.total),
+                  PriceFormatter.formatPriceCAD(state.total),
                   style: GoogleFonts.roboto(
                     fontSize: 20.sp,
                     fontWeight: FontWeight.w700,
@@ -185,12 +186,7 @@ class CartScreen extends StatelessWidget {
               height: 52.h,
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const StationCheckoutScreen(),
-                    ),
-                  );
+                  context.push('/checkout');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ColorsManager.primary,

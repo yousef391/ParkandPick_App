@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:testtt/core/theme/colors_manager.dart';
 import 'package:testtt/core/theme/text_styles.dart';
 import 'package:testtt/data/models/station_model.dart';
-import 'package:testtt/providers/location_provider.dart';
-import 'package:testtt/providers/product_station_provider.dart';
+import 'package:testtt/presentation/cubits/location/location_cubit.dart';
+
+import 'package:testtt/presentation/cubits/station/station_cubit.dart';
 
 /// Main widget to display nearby stations based on user location
 class NearbyStationsWidget extends StatefulWidget {
@@ -33,54 +34,69 @@ class _NearbyStationsWidgetState extends State<NearbyStationsWidget> {
     if (_initialized) return;
     _initialized = true;
 
-    final locationProvider = context.read<LocationProvider>();
-    final stationProvider = context.read<ProductStationProvider>();
+    final locationCubit = context.read<LocationCubit>();
+    final stationCubit = context.read<StationCubit>();
 
     // Get user location
-    final hasLocation = await locationProvider.getCurrentLocation();
+    final success = await locationCubit.getCurrentLocation();
+    final locationState = locationCubit.state;
 
-    if (hasLocation && locationProvider.latitude != null) {
+    if (success && locationState is LocationLoaded) {
       // Load stations with real user location
-      await stationProvider.loadStationsWithLocation(
-        locationProvider.latitude!,
-        locationProvider.longitude!,
+      await stationCubit.loadStationsWithLocation(
+        locationState.position.latitude,
+        locationState.position.longitude,
       );
     } else {
       // Load stations without location sorting
-      stationProvider.loadMockStations();
+      stationCubit.loadMockStations();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<LocationProvider, ProductStationProvider>(
-      builder: (context, locationProvider, stationProvider, _) {
-        // Loading state
-        if (locationProvider.isLoading || stationProvider.isLoading) {
-          return const StationLoadingWidget();
-        }
+    return BlocBuilder<LocationCubit, LocationState>(
+      builder: (context, locationState) {
+        return BlocBuilder<StationCubit, StationState>(
+          builder: (context, stationState) {
+            // Loading state
+            if (locationState is LocationLoading ||
+                stationState is StationLoading) {
+              return const StationLoadingWidget();
+            }
 
-        // Error state - permission denied
-        if (locationProvider.permissionDenied) {
-          return StationPermissionDeniedWidget(
-            onOpenSettings: () => locationProvider.openSettings(),
-          );
-        }
+            // Error state - permission denied or other
+            // Note: LocationError state might be permission denied
+            if (locationState is LocationError) {
+              return StationPermissionDeniedWidget(
+                onOpenSettings: () =>
+                    context.read<LocationCubit>().openSettings(),
+              );
+            }
 
-        // Get stations
-        final stations = stationProvider.nearbyStations.isNotEmpty
-            ? stationProvider.nearbyStations
-            : stationProvider.stations;
+            // Get stations
+            final stations = stationState is StationLoaded
+                ? stationState.stations
+                : <Station>[];
 
-        if (stations.isEmpty) {
-          return const SizedBox.shrink();
-        }
+            if (stations.isEmpty) {
+              return const SizedBox.shrink();
+            }
 
-        // Show nearby stations list
-        return StationsListWidget(
-          stations: stations,
-          userLatitude: locationProvider.latitude,
-          userLongitude: locationProvider.longitude,
+            double? userLat;
+            double? userLng;
+            if (locationState is LocationLoaded) {
+              userLat = locationState.position.latitude;
+              userLng = locationState.position.longitude;
+            }
+
+            // Show nearby stations list
+            return StationsListWidget(
+              stations: stations,
+              userLatitude: userLat,
+              userLongitude: userLng,
+            );
+          },
         );
       },
     );
@@ -332,7 +348,7 @@ class StationCardWidget extends StatelessWidget {
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text('Impossible d\'ouvrir la carte'),
               backgroundColor: Colors.red,
             ),
@@ -341,7 +357,7 @@ class StationCardWidget extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        print('Error launching maps: $e');
+        debugPrint('Error launching maps: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur: $e'),

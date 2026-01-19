@@ -55,6 +55,23 @@ class Product {
     );
   }
 
+  /// Create from Supabase JSON (snake_case)
+  factory Product.fromSupabase(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String,
+      price: (json['price'] as num).toDouble(),
+      imageUrl: json['image_url'] as String? ?? 'assets/images/default.png',
+      category: json['category'] as String,
+      isAvailable: json['is_available'] as bool? ?? true,
+      availableSizes: json['available_sizes'] != null
+          ? List<String>.from(json['available_sizes'])
+          : null,
+      tags: json['tags'] != null ? List<String>.from(json['tags']) : null,
+    );
+  }
+
   /// Copy with updated values
   Product copyWith({
     String? id,

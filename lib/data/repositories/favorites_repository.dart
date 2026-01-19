@@ -1,23 +1,15 @@
-import 'package:flutter/material.dart';
+import 'package:injectable/injectable.dart';
 import 'package:testtt/data/models/product_model.dart';
 
-/// Favorites Provider - manages user's favorite products
-class FavoritesProvider extends ChangeNotifier {
+/// Favorites Repository - Manages user's favorite products
+/// In-memory implementation
+@lazySingleton
+class FavoritesRepository {
   final List<Product> _favorites = [];
-  bool _isLoading = false;
 
   List<Product> get favorites => List.unmodifiable(_favorites);
-  bool get isLoading => _isLoading;
-  bool get isEmpty => _favorites.isEmpty;
 
-  Future<void> loadFavorites() async {
-    _isLoading = true;
-    notifyListeners();
-    // TODO: Replace with persistence (local/remote)
-    await Future.delayed(const Duration(milliseconds: 200));
-    _isLoading = false;
-    notifyListeners();
-  }
+  bool get isEmpty => _favorites.isEmpty;
 
   bool isFavorite(String productId) {
     return _favorites.any((p) => p.id == productId);
@@ -29,23 +21,19 @@ class FavoritesProvider extends ChangeNotifier {
     } else {
       _favorites.add(product);
     }
-    notifyListeners();
   }
 
   void addFavorite(Product product) {
     if (!isFavorite(product.id)) {
       _favorites.add(product);
-      notifyListeners();
     }
   }
 
   void removeFavorite(String productId) {
     _favorites.removeWhere((p) => p.id == productId);
-    notifyListeners();
   }
 
   void clear() {
     _favorites.clear();
-    notifyListeners();
   }
 }

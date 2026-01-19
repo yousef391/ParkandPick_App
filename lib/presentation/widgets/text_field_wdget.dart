@@ -7,6 +7,7 @@ class TextFieldWidget extends StatelessWidget {
   final String hintText;
   final bool? obscureText;
   final Widget? suffixIcon;
+  final Widget? prefixIcon;
   final EdgeInsetsGeometry? contentPadding;
   final TextStyle? hintStyle;
   final TextStyle? inputTextStyle;
@@ -21,6 +22,7 @@ class TextFieldWidget extends StatelessWidget {
     required this.hintText,
     this.obscureText,
     this.suffixIcon,
+    this.prefixIcon,
     this.contentPadding,
     this.hintStyle,
     this.inputTextStyle,
@@ -36,20 +38,20 @@ class TextFieldWidget extends StatelessWidget {
     return TextFormField(
       controller: controller,
       validator: validator,
-      style: inputTextStyle ?? TextStyles.body,
+      cursorColor: ColorsManager.primary,
+      style: inputTextStyle ?? TextStyles.body.copyWith(color: Colors.black),
       obscureText: obscureText ?? false,
       decoration: InputDecoration(
         filled: true,
         fillColor: backgroundColor ?? ColorsManager.textfieldcolor,
         suffixIcon: suffixIcon,
+        prefixIcon: prefixIcon,
         hintStyle: hintStyle ?? TextStyles.hintText,
         hintText: hintText,
         isDense: true,
-        contentPadding:
-            contentPadding ??
+        contentPadding: contentPadding ??
             EdgeInsets.symmetric(vertical: 18.h, horizontal: 20.w),
-        focusedBorder:
-            focusedBorder ??
+        focusedBorder: focusedBorder ??
             OutlineInputBorder(
               borderRadius: BorderRadius.circular(16.r),
               borderSide: const BorderSide(
@@ -57,8 +59,7 @@ class TextFieldWidget extends StatelessWidget {
                 width: 1.3,
               ),
             ),
-        enabledBorder:
-            enabledBorder ??
+        enabledBorder: enabledBorder ??
             OutlineInputBorder(
               borderRadius: BorderRadius.circular(16.r),
               borderSide: const BorderSide(
